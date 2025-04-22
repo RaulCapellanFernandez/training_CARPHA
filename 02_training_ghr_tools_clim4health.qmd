@@ -1,0 +1,136 @@
+---
+title: ""
+format: 
+  html:
+    code-fold: false
+---
+
+::: column-margin
+![](dependencies/ghr_libraries/clim4health/tutorials/figures/general/logo_bsc.png){width="357" height="108"}
+:::
+
+# Training: `clim4health package`
+
+# 🧭 Table of Contents
+
+Here’s what we’ll cover in this notebook:
+
+-   [1. Introduction](#1.-Introduction)
+-   [2. Setup and Data Loading](#2.-Setup-and-Data-Loading)
+-   [3. Download data](#3.-Download-data)
+-   [4. Load data](#4.-Load-data)
+-   [5. Mask data](#5.-Mask-data)
+-   [6. Time agregations](#6.-Time-agregations)
+-   [7. Spatial agregations](#7.-Spatial-agregations)
+
+# 1. Introduction
+
+clim4health is a tool developed within the HARMONIZE project with the aim of post-processing climate data harmonized to the spatiotemporal aggregation of health data. The tool consists in an R-package and its documentation including examples on how to use the tool and recommendations of parameter selection in some case studies.
+
+<img src="dependencies/ghr_libraries/clim4health/tutorials/figures/general/clim4health_structure.png" width="708" height="363"/>
+
+# 2. Setup and Data Loading
+
+```{r}
+setwd("dependencies/ghr_libraries/clim4health/")
+path <- getwd()
+
+options(warn = -1)
+
+packages <- c("ecmwfr", "exactextractr", "startR", "CSTools")
+
+installed <- packages %in% rownames(installed.packages())
+if (any(!installed)) {
+  install.packages(packages[!installed])
+}
+
+
+library(exactextractr)
+library(ecmwfr)
+library(sf)
+library(startR)
+library(CSTools)
+
+source('functions/clim4health_load.R')
+source('functions/clim4health_index.R')
+source('functions/clim4health_time.R')
+source('functions/clim4health_spatial.R')
+source('functions/clim4health_get.R')
+
+
+```
+
+# 3. Download data
+
+```{r}
+#| scrolled: true
+#clim4health_get(pat = "1d6e6015-97b6-438f-848f-d8ac628d2014",
+#                dataset = "reanalysis-era5-land-monthly-means",
+#                product_type = "monthly_averaged_reanalysis",
+#                variable = "2m_temperature",
+#                year = c(2010, 2011, 2012),
+#                month = c(4, 5),
+#                area = c(33, -93, -23, -17),
+#                outname = "era5land")
+```
+
+# 4. Load data
+
+```{r}
+#| scrolled: true
+setwd("dependencies/ghr_libraries/clim4health/")
+data <- clim4health_load('./sample_data/ecmwf51/forecast/',var = "t2m", 
+                         data_type = "fcst", sdates = "20240401", ext = 'nc')
+```
+
+# 5. Mask data
+
+```{r}
+mask <- clim4health_index(data, mod_vals = TRUE,  lower_threshold = 280, upper_threshold = 290, lower_close = FALSE, upper_close = FALSE)
+
+PlotEquiMap(var = mask$data[1, 1, 1, 1, , ],
+            lat = mask$coords$latitude,
+            lon = mask$coords$longitude,
+            filled.continents = FALSE,
+            units = 'Temperature (C)', # text to appear in the legend
+            toptitle = 'Mask temperature between 280 and 290 K', # text to appear as overall title
+            colNA = '#ffffff'
+            )
+```
+
+# 6. Time agregations
+
+```{r}
+daily_data <- clim4health_time(data, aggregation = "daily")
+
+PlotEquiMap(var = daily_data$data[1, 1, 1, 1, , ],
+            lat = data$coords$latitude,
+            lon = data$coords$longitude,
+            filled.continents = FALSE,
+            units = 'Temperature (C)', # text to appear in the legend
+            toptitle = 'Mean daily t2m', # text to appear as overall title
+            colNA = '#ffffff'
+            )
+```
+
+```{r}
+yearly_data <- clim4health_time(data, aggregation = "yearly")
+
+ PlotEquiMap(var = yearly_data$data[1, 1, 1, 1,  , ],
+            lat = data$coords$latitude,
+            lon = data$coords$longitude,
+            filled.continents = FALSE,
+            units = 'Temperature (C)', # text to appear in the legend
+            toptitle = 'Mean yearly t2m', # text to appear as overall title
+            colNA = '#ffffff'
+            )
+```
+
+# 7. Spatial agregations
+
+```{r}
+shp_file <- paste0(path, "/sample_data/shapefiles/MGN_ANM_MPIOS.shp")
+result   <- clim4health_spatial(data,  shp_file)
+
+dim(result)
+```

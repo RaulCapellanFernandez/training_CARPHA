@@ -1,0 +1,74 @@
+---
+jupyter:
+  kernelspec:
+    display_name: R
+    language: R
+    name: ir
+---
+
+::: column-margin
+![](dependencies/ghr_libraries/clim4health/tutorials/figures/general/logo_bsc.png){width="357" height="108"}
+:::
+
+# Training: `data4heralth package`
+
+# Aggregating health data
+
+Before beginning to code, we always need to set up the R environment. This time, we will only load one R-package: *data4health*. Data4health is a package that we are developing at the moment. This means that the package is not yet published, you are among the first to use it!
+
+But this also means, that there still be errors. Please let us know if you encounter any and we will fix them asap. Likewise, if you can think of anything missing or anything you would like to add, let us know too!
+
+Thank you!
+
+```{r}
+#| scrolled: true
+setwd("dependencies/ghr_libraries/harmonize.data4health")
+source('./R/data4health_filter.r')
+source('./R/data4health_load.R')
+source('./R/data4health_aggregate.r')
+```
+
+Now, let's get started! First of all, you need to load the health data in. In this case it is a 'csv' file. You can either choose to use a csv specific function like read.csv or use the umbrella function from the data4health package. The data4health package currently loads in csv, ecxel, rds, and many more formats!
+
+The object data, now contains ALL the clean data. But often, you don't want to use all the data. You can use the data4health_filter function for this.
+
+```{r}
+data <- data.frame(
+  ID = c(1, 2, 3, 4, 5),
+  Name = c("Alice", "Bob", "Charlie", "David", "Emily"),
+  Age = c(25, 30, 22, 28, 35),
+  Date = as.Date(c("2023-01-15", "2023-02-20", "2023-03-05", "2023-04-10", "2023-05-18")),
+  City = c("New York", "London", "Paris", "Tokyo", "Sydney"),
+  Gender = c('Female', 'Male', 'Male', 'Male', 'Female')
+)
+
+print(head(data))
+```
+
+```{r}
+?data4health_filter
+```
+
+As you can see in the description for every column, you need to know whether the data is numeric, dates or character.
+
+-   Numeric: "over","under", "between"
+-   Date: "after", "before", "between"
+-   character: "include", "exclude"
+
+You can filter as many or as little columns as you want. Here an example:
+
+```{r}
+filtered_data <- data4health_filter(
+  data,
+  Age = list(over = 25),
+  Date = list(between = c("2023-02-10", "2023-04-15"))
+)
+
+print(head(filtered_data))
+```
+
+Afterwards we aggregate with the data4health_aggregate function.
+
+```{r}
+data4health_aggregate(data, time_col = "Date", space_col = "Gender")
+```

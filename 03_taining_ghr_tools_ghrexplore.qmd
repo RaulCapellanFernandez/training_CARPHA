@@ -1,0 +1,236 @@
+---
+jupyter:
+  kernelspec:
+    display_name: R 4.4.2
+    language: R
+    name: ir44
+---
+
+::: column-margin
+![](dependencies/ghr_libraries/clim4health/tutorials/figures/general/logo_bsc.png){width="357" height="108"}
+:::
+
+# Training: `ghrexplore package`
+
+<hr style="border: 1px solid #000; width: 80%; margin: 20px auto;">
+
+# 🧭 Table of Contents
+
+Here’s what we’ll cover in this notebook:
+
+-   [1. Introduction](#1.-Introduction)
+-   [2. Setup and Data Loading](#2.-Setup-and-Data-Loading)
+-   [3. Statistics](#4.-Statistics)
+
+# 1. Introduction
+
+# 2. Setup and Data Loading
+
+```{r}
+install.packages('devtools')
+path_cstools     <- './dependencies/bsc_libraries/cstools-master.tar.gz'
+path_startr      <- './dependencies/bsc_libraries/startR-master.tar.gz'
+
+install.packages(path_cstools, repos = NULL, type = "source")
+install.packages(path_startr , repos = NULL, type = "source")
+```
+
+```{r}
+setwd("dependencies/ghr_libraries/ghrexplore/")
+devtools::load_all()
+devtools::document()
+```
+
+```{r}
+# Load data
+# dengue_MS is spatiotemporal data
+data(dengue_MS)
+# dengue_SP is timeseries data 
+data(dengue_SP)
+# dengue map
+data("map_MS")
+
+### make testing data sets ----
+data.test <- dengue_MS %>% 
+  filter(micro_code != "50001") %>%
+  mutate(tmin = case_when(
+    date == "2000-01-01" & micro_code == "50002" ~ NA, 
+    T ~ tmin
+  ))
+```
+
+# 3. Statistics
+
+🗺️ **Map of Mato Grosso do Sul**\
+Let’s start by visualizing the **map of Mato Grosso do Sul**, Brazil. This map will help us understand the **spatial distribution** of dengue cases across its administrative micro-regions.
+
+```{r}
+# Show the map that we are going to use
+ggplot() +
+  geom_sf(data = map_MS)
+```
+
+🌡️📈 **Yearly Minimum Temperature Across Micro-Regions**\
+This time series plot shows the **minimum daily temperature** (`tmin`) aggregated monthly across the 11 micro-regions of **Mato Grosso do Sul**.
+
+By visualizing these trends, we can explore how **temperature variations** over time may influence **dengue transmission dynamics**, as mosquito activity is often **climate-sensitive**.
+
+```{r}
+dengue_MS %>%
+  plot_timeseries(var = "tmin",
+                  type = "cov",
+                  time = "date",          
+                  area = "micro_code",   
+                  title = "Yearly Minimun Temperature") 
+
+```
+
+🌡️📊 **Time Series of Temperature Variables (Plotted Separately)**\
+In the following section, we’ll generate **separate time series plots** for key temperature-related variables across all micro-regions of **Mato Grosso do Sul**.
+
+```{r}
+# Plot TS of temperature: plots in separate graphs
+dengue_MS %>%
+  plot_timeseries(var = "tmin",
+                  time = "date",
+                  area = "micro_code",
+                  panel = TRUE,           # The multiple plots 
+                  var_label= "Minimum Temperature",
+                  palette = "violetred")
+```
+
+🗺️📉 **Average Minimum Temperature by Meso-Region and Year**\
+This time series plot shows the **average minimum temperature (`tmin`)** across the **meso-regions** of **Mato Grosso do Sul**, aggregated **yearly**.
+
+```{r}
+dengue_MS %>%
+  plot_timeseries(var = "tmin",
+                  time = "date",
+                  area = "micro_code",
+                  aggregate_space = "meso_code",  # The target for aggregation
+                  aggregate_space_fun = "mean",   # Function for aggregation
+                  aggregate_time = "year",
+                  palette = "Colorblind")
+```
+
+🦟📆 **Monthly Dengue Cases by Micro-Region**\
+This time series plot displays the **monthly number of reported dengue cases** across all **micro-regions** of **Mato Grosso do Sul**.
+
+```{r}
+dengue_MS %>% 
+  plot_timeseries(var = "dengue_cases", # Variable defining the cases 
+                  type = "counts",
+                  time = "date",          # Variable defining the date "dd-mm-yyyy"
+                  area = "micro_code",    # Variable defining the spatial unit
+                  title= "Monthly Cases",
+                  palette = "royalblue") 
+
+```
+
+🦟📈 **Dengue Incidence Over Time – Faceted by Micro-Region**\
+This plot shows the **incidence of dengue cases** over time, broken down into **individual panels for each micro-region** in **Mato Grosso do Sul**.
+
+```{r}
+# Plot TS of incidence: with panels by area 
+dengue_MS %>% 
+  plot_timeseries(var = "dengue_cases", # Variable defining the cases 
+                  type = "inc",
+                  pop = "population",
+                  time = "date",          # Variable defining the date "dd-mm-yyyy"
+                  area = "micro_code",    # Variable defining the spatial unit
+                  panel = TRUE,           # The multiple plots 
+                  palette = "#800080",
+                  pt=1)
+```
+
+🌡️🔥 **Heatmap of Minimum Temperature – Aggregated Across Micro-Regions**\
+This heatmap displays the **minimum temperature (`tmin`)** over time, aggregated **across all micro-regions** in **Mato Grosso do Sul**.
+
+```{r}
+# Plot Heatmap of temperature: aggregate across space
+dengue_MS %>%
+  plot_heatmap(var = "tmin",
+                   time = "date",
+                   area = "micro_code",
+                   aggregate_space = "meso_code",   # Aggregation target
+                   aggregate_space_fun = "mean",    # Function for aggregation
+                   palette = "Reds")
+```
+
+🌡️🦟 **Heatmap of Dengue Case Counts – Custom Centering**\
+This heatmap visualizes the **number of dengue cases** over time for each **micro-region** in **Mato Grosso do Sul**, using a **custom color centering** to enhance interpretability.
+
+```{r}
+# Plot Heatmap of case counts custom centering
+dengue_MS %>%
+  plot_heatmap(var = "dengue_cases", # Variable defining the cases 
+               type = "counts",
+               time = "date",          # Variable defining the date "dd-mm-yyyy"
+               area = "micro_code",  
+               palette = "BlYlRd", 
+               title = "Dengue counts", 
+               var_label = "Dengue \ncounts",
+               centering = 5000)  
+```
+
+🌤️📅 **Seasonal Patterns in Climate Covariates**\
+In this section, we explore the **seasonality of key environmental covariates**, such as **temperature**, **precipitation**, or **humidity**, across the micro-regions of **Mato Grosso do Sul**.
+
+```{r}
+
+## plot_seasonality  covariates ----
+dengue_MS %>%
+  plot_seasonality(var = "tmin",                    # Variable to be plotted
+                   time = "date",                   # Variable defining the date "dd-mm-yyyy"
+                   area = "micro_code",
+                   var_label = "Minimum Temperature", 
+                   palette= "Reds")   
+```
+
+🗺️📊 **Yearly Mean Dengue Cases by Micro-Region**\
+This map illustrates the **average number of dengue cases per year** for each **micro-region** in **Mato Grosso do Sul**.
+
+```{r}
+# Yearly mean cases
+dengue_MS %>% 
+  plot_map(var = "dengue_cases",         # Variable to be plotted 
+           type = "counts",
+           time = "date",        # Variable defining the date "dd-mm-yyyy"
+           area = "micro_code",  # Variable defining area in the dataframe
+           pop = "population",
+           map = map_MS,         # the sf object for the map 
+           map_area = "code",
+           palette = "Purp")
+```
+
+📍📉 **Spatial Average of Dengue Cases Across Micro-Regions**\
+In this section, we calculate the **spatial average** of dengue cases across all micro-regions in **Mato Grosso do Sul** for each time point.
+
+```{r}
+# Spatial average
+dengue_MS %>% 
+  plot_map(var = "dengue_cases",         # Variable to be plotted 
+           type = "inc",
+           time = "date",        # Variable defining the date "dd-mm-yyyy"
+           area = "micro_code",  # Variable defining area in the dataframe
+           pop = "population",
+           map = map_MS,         # the sf object for the map 
+           map_area = "code",    # Variable defining the area in the sf object
+           by_year = FALSE)
+```
+
+🔗📊 **Correlation Matrix – Exploring Variable Relationships**\
+In this section, we generate a **correlation matrix** to examine how different variables (such as dengue cases, temperature, precipitation, etc.) are **related** to one another across the dataset.
+
+```{r}
+# Correlation matrix
+dengue_MS %>% 
+  plot_correlation(var = c("dengue_cases","pop_density", 
+                           "tmax", "tmin", "pdsi", "urban",
+                           "water_network", "water_shortage"),  
+                   method = "pearson",
+                   var_label = c("dengue cases","pop. density", 
+                                 "max temp", "min temp", "drought index", "urbanization",
+                                 "water network", "water shortage"),
+                   print=TRUE) 
+```
