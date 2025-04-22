@@ -13,6 +13,7 @@ format:
 
 ::: {style="text-align: center;"}
 :::
+
 # 🧭 Table of Contents
 
 Here’s what we’ll cover in this notebook:
@@ -319,6 +320,14 @@ df <- df %>%
 print(df %>% filter(district == "Ravenwick", format(date, "%Y-%m") == "2020-03"))
 ```
 
+### \*\*\*\*\*\* Exercise 1: \*\*\*\*\*\*
+
+Copy the previous code and filter the data with this information: - District: Wolfstead - Date : 2017-10
+
+```{r}
+
+```
+
 ------------------------------------------------------------------------
 
 ## 4. Statistics
@@ -371,6 +380,14 @@ df %>%
        color = "Sex") +
   theme_minimal() +
   theme(axis.text.x = element_text(size = 14))
+```
+
+### \*\*\*\*\*\* Exercise 2: \*\*\*\*\*\*
+
+Copy the previous code and change the colors of the previous graph: - male_cases: yellow - female_cases: blue
+
+```{r}
+
 ```
 
 🔥🦟 **Heatmap: Linking Temperature and Dengue Across Cariba**\
@@ -459,6 +476,14 @@ ggplot(df_plot, aes(x = month, y = factor(year), fill = case_range)) +
     legend.title = element_text(size = 12),
     legend.text = element_text(size = 10)
   )
+```
+
+### \*\*\*\*\*\* Exercise 3: \*\*\*\*\*\*
+
+Copy the previous code and change the range of the cases to: - 0-40 - 41-80 - 81-120 - +120
+
+```{r}
+
 ```
 
 📊🏝️ **Dengue Cases by District – Where Did It Hit Hardest?**\
