@@ -1,0 +1,369 @@
+This document aims at introducing dengue data to someone with no previous experience. Before starting it is necessary to have the health data, instructions on how to obtain these are in the ReadMe of this project.
+
+The steps include:
+
+1.  Downloading the data
+
+2.  Getting to know the data: detect differences between different datasets
+
+3.  Information on the patients: Age, Sex, Pregnancy, Race
+
+4.  Information on the case: classification, confirmation criteria, dengue category, exam type, evolution of the case
+
+5.  Timeline of the dengue case: distribution throughout the year, duration of cases, course of the disease
+
+6.  Mapping spatially: Absolute cases, incidence
+
+Along the way, each topic will be divided into 3:
+
+-   ![](https://daniela-l.github.io/quarto-website/images/idea-02.png){width="35"} indicates that you will learn something
+
+-   ![](https://daniela-l.github.io/quarto-website/images/eye-01.png){width="23"} indicates that you will see the data in a plot
+
+-   ![](https://daniela-l.github.io/quarto-website/images/filter-01.png){width="23"} indicates that there is a opportunity to filter data (if necessary).
+
+# **Setting up the R environment**
+
+```{r}
+library(ggplot2)
+library(stringi)
+library(dplyr)
+```
+
+# **Download the data by microdatasus**
+
+As described in the download instructions
+
+```{r}
+# lines <- readLines("data/peru_dengue.csv")
+lines <- readLines("data/peru/datos_abiertos_vigilancia_dengue.csv")
+
+lines_fixed <- gsub("\\\\,", " ", lines)
+
+
+temp_file <- tempfile()
+writeLines(lines_fixed, temp_file)
+
+data <- read.csv(temp_file, stringsAsFactors = FALSE)
+
+# data[data$edad > 120,]
+```
+
+#### Understanding the data structure
+
+In this package there is a dictionary with all variables existent in health files from the project coutnries. The file can be called via:
+
+```{r}
+data(dictionary)
+```
+
+The variables are organized by country and disease. To get the description of the variables in the dataset we just loaded you can use the follwoing line on code:
+
+```{r}
+# dictionary <- read.csv("data/Dictionary_all.csv")
+# save(dictionary, file='data/dictionary.rda')
+
+knitr::kable(dictionary[dictionary$Country == "Peru" &
+      dictionary$Disease == "Dengue" & 
+      dictionary$Var %in% colnames(data),
+      c("Var","Description")])
+```
+
+![](https://daniela-l.github.io/quarto-website/images/filter-01.png){width="23"}  If there are columns which are not relevant for you you can remove them with the following line. **This is an example, remember to replace 'localcod' and 'diresa' with the names of the columns that you want to remove**
+
+```{r}
+data <- subset(data, select=-c(localcod, diresa))
+```
+
+#### Completeness of the data
+
+```{r}
+total_missing <- colSums(is.na(data)) + 
+  colSums(data == "", na.rm=TRUE) + 
+  colSums(data == "\\N", na.rm=TRUE)
+
+total_missing_df <- data.frame(column = names(total_missing),
+                               missing = unname(total_missing),
+                               missing_pct = unname(total_missing) / nrow(data) *100)
+```
+
+![](https://daniela-l.github.io/quarto-website/images/eye-01.png){width="23"} You can plot the missing values as follows:
+
+# Hola soy daniela
+
+```{r}
+ggplot(total_missing_df, aes(x = column, y = missing_pct)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Missing values in each column",
+       x = "Columns",
+       y = "Missing values [%]") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+![](https://daniela-l.github.io/quarto-website/images/filter-01.png){width="23"}  If there are columns with large amounts of missing values you can set a threshold and all columns with more missing values than the threshold will be deleted:
+
+```{r}
+missing_threshold <- 20
+
+cols_to_remove <- total_missing_df$column[total_missing_df$missing_pct > missing_threshold]
+data <- data[, setdiff(names(data), cols_to_remove)]
+print(paste0("The following columns were removed from your dataset: ",
+      paste(cols_to_remove, collapse = ", ")))
+```
+
+# **Information on the patient**
+
+### ***Age***
+
+To calculate the age of the patients we need the information of two columns: edad and tipo_edad.
+
+tipo_edad indicates in what dimension the age is being given.
+
+-   A: age is given in years
+
+-   M: age is given in months
+
+-   D: age is given in days
+
+```{r}
+data$age <- ifelse(data$tipo_edad == "A", data$edad,
+                   ifelse(data$tipo_edad == "M", data$edad / 12,
+                          ifelse(data$tipo_edad == "D", data$edad / 365, NA)))
+```
+
+![](https://daniela-l.github.io/quarto-website/images/filter-01.png){width="23"}  Often there can be errors in the age, for example, in this dataset the oldest person is `{r} max(data$age)` years old. If thats seems too old, you can filter and exclude all patients above a certain age.
+
+```{r}
+age_threshold <- 120
+
+data <- data[data$age <= age_threshold,]
+```
+
+![](https://daniela-l.github.io/quarto-website/images/eye-01.png){width="23"} You can see the age distribution in the following plot:
+
+```{r}
+ggplot2::ggplot(data, aes(x = age))+
+  geom_histogram(binwidth = 1, fill = "lightblue",color="black", alpha = 0.7)+
+  annotate("text", x = 100, y = Inf, hjust = 1, vjust = 1, size = 4,
+           label = paste0(sum(is.na(data$age)), " NA values"))+
+  labs(x="Age [years]", y="Count",
+       title="Age distribution according to the codified age field")+
+  theme_light()
+```
+
+### ***Sex of the patients***
+
+```{r}
+data <- data %>%
+  dplyr::mutate(sex = case_when(
+    sexo == "F" ~ "female",
+    sexo == "M" ~ "male",
+    TRUE ~ "other"
+  ))
+``` 
+
+![](https://daniela-l.github.io/quarto-website/images/eye-01.png){width="23"} You can visualise the sexes here:
+
+```{r}
+ggplot2::ggplot(data, aes(x = sex, fill=sex))+
+  geom_bar()+
+  ggtitle("Sex distribution of dengue cases in 2015")+
+  labs(x = "Sex of the patient", y = "Count", fill="Sex")+
+  annotate("text", x = Inf, y = Inf, hjust = 1, vjust = 1, size = 4,
+           label = paste0(sum(is.na(data$sexo)), " NA values"))+
+  theme_light()
+```
+
+# **Information on the cases**
+
+### ***Classification of the dengue cases***
+
+ ![](https://daniela-l.github.io/quarto-website/images/idea-02.png){width="35"}  The type of disease is given by both the column enfermedad and diagnostic. **ICD-10** is the 10th revision of the [International Classification of Diseases](https://en.wikipedia.org/wiki/International_Classification_of_Diseases "International Classification of Diseases") (ICD), a [medical classification](https://en.wikipedia.org/wiki/Medical_classification "Medical classification") list by the [World Health Organization](https://en.wikipedia.org/wiki/World_Health_Organization "World Health Organization") (WHO).
+
+-   "DENGUE SIN SEÑALES DE ALARMA" = "A97.0",
+
+-   "DENGUE CON SEÑALES DE ALARMA" = "A97.1",
+
+-   "DENGUE GRAVE" = "A97.2"
+
+```{r}
+expected_mapping <- list(
+  "DENGUE SIN SEÑALES DE ALARMA" = "A97.0",
+  "DENGUE CON SEÑALES DE ALARMA" = "A97.1",
+  "DENGUE GRAVE" = "A97.2"
+)
+
+# Step 2: Check if all rows match the expected mapping
+mismatches <- data[!(data$diagnostic == expected_mapping[data$enfermedad]), ]
+
+# Step 3: Output mismatches
+if (nrow(mismatches) == 0) {
+  print("All combinations are consistent with the expected mapping.")
+} else {
+  print("There are mismatched rows:")
+  print(mismatches)
+}
+```
+
+```{r}
+data <- data %>%
+  dplyr::mutate(type = case_when(
+    diagnostic == "A97.0" ~ "dengue without alarm signs",
+    diagnostic == "A97.1" ~ "dengue with alarm signs",
+    diagnostic == "A97.2" ~ "serious dengue",
+    TRUE ~ "other"
+  ))
+``` 
+
+-   ![](https://daniela-l.github.io/quarto-website/images/eye-01.png){width="23"} Here you can visualise how the dengue cases were classified:
+
+```{r}
+ggplot2::ggplot(data, aes(x = type, fill=type))+
+  geom_bar()+
+  ggtitle("Type of dengue cases in 2015")+
+  labs(x = "Dengue type", y = "Count", fill="Dengue type")+
+  annotate("text", x = Inf, y = Inf, hjust = 1, vjust = 1, size = 4,
+           label = paste0(sum(is.na(data$enfermedad)), " NA values"))+
+  theme_light()
+```
+
+# **Timeline of dengue cases**
+
+### ***Notification distribution throughout the year***
+
+![](https://daniela-l.github.io/quarto-website/images/idea-03.png){width="23"} Inital symptoms are given by the column ano y semana.
+
+```{r}
+data$week <- data$semana
+data$year <- data$ano
+data$epiweek_year <- paste0(sprintf("%02d",data$semana), "-", data$ano)
+# case_counts <- as.data.frame(table(data$epiweek_year))
+# colnames(case_counts) <- c("epiweek_year", "count")  
+# hosp <- as.data.frame(table(den15$MUNICIPIO, dnn = list("code_muni")), responseName = "hosp_muni")
+case_counts <- data.frame(epiweek_year = names(table(data$epiweek_year)),
+                          year = substr(names(table(data$epiweek_year)), 4, 7),
+                          week = substr(names(table(data$epiweek_year)), 1, 2),
+                          count = unname(table(data$epiweek_year)))
+
+case_counts <- case_counts[order(case_counts$year,decreasing=FALSE),]
+```
+
+![](https://daniela-l.github.io/quarto-website/images/eye-01.png){width="23"}
+
+```{r}
+ggplot2::ggplot(case_counts, aes(x = epiweek_year, y = count.Freq)) +
+  geom_bar(stat = "identity", fill = "lightblue", color="darkgrey",alpha = 0.7)+
+  theme_minimal() +
+  labs(title = "Suspected dengue cases in 2015 by epiweek",
+       x = "Epiweek",
+       y = "Count") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+![](https://daniela-l.github.io/quarto-website/images/filter-01.png){width="23"} iYou can filter for the timeperiod that you are interested in
+
+´
+
+# **Mapping spatially**
+
+You can map the cases spatially using the columns deparatamento, provincia, distrito and localidad.
+
+### Departamento
+
+```{r}
+# load shapefiles
+shp1 <- sf::read_sf("data/shapefiles/gadm41_PER_1.shp")
+
+#correct names to match
+shp1$NAME_1 <- stri_trans_general(stri_trans_totitle(shp1$NAME_1), "Latin-ASCII")
+data$adm1 <- stri_trans_totitle(data$departamento)
+
+# agreggate by department
+department_cases <- as.data.frame(table(data$adm1, dnn = list("department")), responseName = "department_cases")
+
+# merge
+shp1 <- merge(shp1, department_cases, by.x = "NAME_1", by.y = "department", all.x = TRUE)
+
+# plot
+ggplot(shp1) +
+  ggtitle("Cases per department")+
+  geom_sf( aes(fill=department_cases), size=.15, show.legend = TRUE) 
+```
+
+### Provincias
+
+```{r}
+# load shapefiles
+shp2 <- sf::read_sf("data/shapefiles/gadm41_PER_2.shp")
+
+#correct names to match
+shp2$NAME_2 <- stri_trans_general(stri_trans_totitle(shp2$NAME_2), "Latin-ASCII")
+data$adm2 <- stri_trans_totitle(data$provincia)
+
+# agreggate by department
+province_cases <- as.data.frame(table(data$adm2, dnn = list("province")), responseName = "province_cases")
+
+# merge
+shp2 <- merge(shp2, province_cases, by.x = "NAME_2", by.y = "province", all.x = TRUE)
+
+# plot
+ggplot(shp2) +
+  ggtitle("Cases per province")+
+  geom_sf( aes(fill=province_cases), size=.15, show.legend = TRUE) 
+
+```
+
+### Distrito
+
+```{r}
+# load shapefiles
+shp3 <- sf::read_sf("data/shapefiles/gadm41_PER_3.shp")
+
+#correct names to match
+shp3$NAME_3 <- stri_trans_general(stri_trans_totitle(shp3$NAME_3), "Latin-ASCII")
+data$adm3 <- stri_trans_totitle(data$distrito)
+
+# agreggate by department
+district_cases <- as.data.frame(table(data$adm3, dnn = list("district")), responseName = "district_cases")
+
+# merge
+shp3 <- merge(shp3, district_cases, by.x = "NAME_3", by.y = "district", all.x = TRUE)
+
+# plot
+ggplot(shp3) +
+  ggtitle("Cases per district")+
+  geom_sf( aes(fill=district_cases), size=.15, show.legend = TRUE) 
+```
+
+### Locality
+
+
+
+"diresa" "ubigeo" "localcod"
+
+### Delete original colummns
+
+Everytime 
+```{r}
+col_pairs <- list(departamento = "adm1", provincia = "adm2")
+cols_to_remove2 <- c()
+
+for (col in col_pairs) {
+  if (col %in% colnames(data)) {
+    print(col)
+    cols_to_remove2 <- append(cols_to_remove, names(col_pairs[col_pairs == col]))
+    print(cols_to_remove2)
+  }
+}
+
+if ( length(cols_to_remove2 > 0)) {
+  data <- data[, setdiff(names(data), cols_to_remove)]
+  print(paste0("The following columns were removed from your dataset: ",
+        paste(cols_to_remove, collapse = ", ")))  
+}
+
+
+```
+
+

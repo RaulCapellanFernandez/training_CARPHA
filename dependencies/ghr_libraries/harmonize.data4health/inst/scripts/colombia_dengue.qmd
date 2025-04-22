@@ -1,0 +1,817 @@
+---
+title: "Preprocessing Dengue Data"
+author: "Daniela Luhrsen, Rachel Lowe and Raquel Lana"
+date: "2022-10-27"
+output: github_document
+editor_options: 
+  chunk_output_type: console
+message: true
+editor: 
+  markdown: 
+    wrap: 80
+---
+
+This document aims at introducing dengue data to someone with no previous
+experience. Before starting it is necessary to have the health data,
+instructions on how to obtain these are in the ReadMe of this project.
+
+The steps include:
+
+1.  Downloading the data
+2.  Getting to know the data
+3.  Information on the patients
+4.  Information on the case
+5.  Timeline of the dengue case
+6.  Mapping spatially:
+
+Along the way, each topic will be divided into 3:
+
+-   ![](images/idea-02.png){width="25"} indicates that you will learn something
+
+-   ![](images/eye-01.png){width="24"} indicates that you will see the data in a
+    plot
+
+-   ![](images/filter-01.png){width="20"} indicates that there is a opportunity
+    to filter and/or fix data (if necessary).
+
+# Setting up the R environment
+
+![](images/idea-02.png){width="25"} In every R script,
+
+In this script we will need the following R-packages:
+
+-   sivirep: to download the data from SIVIGILA
+
+-   dplyr:
+
+-   lubridate: to help format the dates
+
+-   ggplot2: to visualise the data easily
+
+Other options that are being set up now include, setting a maximum waiting time
+for functions (i.e. timeout), how large numbers should be displayed (i.e.
+scipen) and functions are locally loaded.
+
+```{r, warning= FALSE, message=FALSE}
+#load packages
+packages  <- c("sivirep", "ggplot2", "dplyr", "lubridate")
+invisible(install.packages(setdiff(packages, rownames(installed.packages()))))
+invisible(lapply(packages, function(pkg) suppressMessages(require(pkg, character.only = TRUE))))
+
+# set options
+options(scipen = 999)
+options(timeout = 2000)
+
+# load functions
+# files.sources <-  list.files("R/")
+# invisible(sapply(paste0("R/", files.sources), source))
+
+```
+
+### Download the data via API
+
+As described in the [download instructions](colombia_download_data.qmd), the
+health data from Colombia can be downloaded by two different methods. In this
+script, the data will be downloaded via the API from SIVIGILA, the following
+code block is an example that will download the data for the year 2015. The
+dengue can take a few seconds (approx 30 seconds per year). It is recommended to
+download the data once and save it to your computer. Afterwards you can load it
+from your local disk every time you want to analyse it.
+
+In the case of this script, run it the first code block once (with the second
+code block commented out), and then you can comment out the first code block and
+uncomment the first code block.
+
+```{r Dengue_Load, message = FALSE, warning = FALSE}
+# data <- import_data_event(
+#   year = c(2016,2017),
+#   nombre_event = "Dengue",
+#   cache = TRUE
+# )
+# write.csv(dengue2015, "./data/colombia_dengue_2015.csv", row.names = FALSE)
+```
+
+```{r}
+data <- read.csv("./data/colombia_dengue_2015.csv")
+```
+
+### Understanding the data columns
+
+![](images/idea-02.png){width="25"} The dataset is structured, so that every
+line is one case and each column describes that case. For dengue in Colombia
+there are 72 variables, the explanation for each variable can be found on the
+[SIVIGILA
+webpage](https://www.dssa.gov.co/images/documentos/sivigila2017/Anexo%202%20Diccionario%20datos.pdf).
+However, it is only available in Spanish. A translation into English can be
+found in [this csv file](Workspace/Dictionary_all.csv). This file also contains
+the decodification for all numerical categories. A small overview of this file
+can be seen below:
+
+```{r Dictionary,  message=FALSE}
+# load dictionary
+variables <- readr::read_csv("../HealthDataApp/Dictionary_all.csv")
+
+# filter for country and disease and show the variable's description
+variables[variables$Country == "Colombia" & variables$Disease == "Dengue", c("Var", "Description")]
+```
+
+![](images/filter-01.png){width="20"} To avoid working with unnecessary data, it
+is useful to filter out the variables that will not be used. Below is a line of
+code on how to select only the needed variables. As an example, the code below
+deletes 3 column with information on the military position of the patients.
+
+Change this list as needed!
+
+```{r Dengue_SelectVariables}
+delete_col <- c("fm_fuerza","fm_unidad","fm_grado")
+
+data <- data[, !(names(data) %in% delete_cols)]
+```
+
+### Completeness of the data
+
+![](images/idea-02.png){width="25"} Some of these variables are mandatory to
+notify, others are not, which leads to incomplete datasets. The dataframe
+**NAcount** shows the percentage of NA-values for each variable, below you can
+see it graphically for some of the variables. Here, we chose as the main
+database to explore the variables, data, a database you can download by the FTP
+link.
+
+```{r}
+total_missing <- colSums(is.na(data)) + 
+  colSums(data == "", na.rm=TRUE) + 
+  colSums(data == "NULL", na.rm = TRUE)
+
+missing_df <- data.frame(column = names(total_missing),
+                         missing = unname(total_missing),
+                         missing_pct = unname(total_missing) / nrow(data) *100)
+
+missing_df
+```
+
+![](images/eye-01.png){width="24"} You can visualise it here.
+
+```{r Dengue_NACount}
+ggplot(missing_df[missing_df$missing_pct != 0,], aes(x = column, y = missing_pct)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Missing values in each column",
+       x = "Columns",
+       y = "Missing values [%]") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+The variables with complete datasets are:
+
+```{r Dengue_Complete}
+names(total_missing[total_missing == 0])
+```
+
+![](images/filter-01.png){width="20"} To avoid working with columns that are
+mostly empty, the line of code below delete any columns that have more than 95%
+empty values. You can change this value if needed.
+
+```{r Dengue_SelectVariables}
+empty_col <- missing_df[["column"]][missing_df[["missing_pct"]] < 95]
+
+data <- data %>% dplyr::select(dplyr::all_of(empty_col))
+```
+
+````{=html}
+<!-- ### VER Ver duplicados antes aqui, ver a comparaçao entre os dados do
+FTP e solicitados. Parece que precisa de data de nascimento para deduplicar.
+Probably we can't deduplicate the files from FTP. Check well the files from the
+MS. There is library in Python that can help
+https://pypi.org/project/pandas-dedupe/. ver 2015, esse veio do ministério 
+```{Checking duplicated registers}
+# Filtro: duplicidade ----
+# data %>%
+#   distinct(NU_NOTIFIC, DT_NOTIFIC, ID_MUNICIP, .keep_all = T) %>% dplyr::count()
+#
+# data %>%
+#   distinct(NU_NOTIFIC, DT_NOTIFIC, ID_MUNICIP, DT_NASC, ID_UNIDADE, .keep_all = T) %>% dplyr::count()
+```
+--\>
+
+<!-- DL: Tego que terminar esto -->
+````
+
+# Information on the patient
+
+### *Age*
+
+![](images/idea-02.png){width="25"} For dengue, there are two methods to obtain
+the age of the patients. First, using the data about the patients birth-date,
+which is provided in the variable **DT_NASC**. The age can be calculated by
+subtracting the birth-date from the notification date.
+
+-   0: Not applicable
+
+-   1: Years
+
+-   2: Months
+
+-   3: Days
+
+-   4: Hours
+
+-   5: Minutes
+
+<!--# Should everything with uni_med > 2 be set to 0 years? -->
+
+```{r}
+data <-  data %>% mutate(age_num = case_when(uni_med ==  1 ~ as.numeric(edad), 
+                                             uni_med == 2 ~ as.numeric(edad) %/% 12,
+                                             uni_med == 3 ~ as.numeric(edad) %/% 365,
+                                             uni_med == 4 ~ as.numeric(edad) %/% 8760,
+                                             uni_med == 5 ~ as.numeric(edad) %/% 525600,
+                                             TRUE ~ NA_real_))
+```
+
+![](images/eye-01.png){width="24"} You can visualise it here:
+
+```{r Dengue_AgeBirthday, warning=FALSE}
+ggplot2::ggplot(data, aes(x = age_num))+
+  geom_histogram(binwidth = 1, fill = "lightblue",color="black", alpha = 0.7)+
+  labs(x="Age [years]", y="Count", title="Age distribution according to the birthday field")+
+  theme_light()
+```
+
+![](images/idea-02.png){width="25"} Another way is to calculate the age using
+the birthdate, which is given in the column **fecha_nto**.
+
+```{r}
+data[["age_bd"]] <- year(Sys.Date()) - year(as.Date(data$fecha_nto))
+```
+
+![](images/idea-02.png){width="25"} Anothe
+
+```{r}
+ggplot2::ggplot(data, aes(x = age_bd))+
+  geom_histogram(binwidth = 1, fill = "lightblue",color="black", alpha = 0.7)+
+  labs(x="Age [years]", y="Count", title="Age distribution according to the birthday field")+
+  theme_light()
+```
+
+![](images/filter-01.png){width="20"} indicat
+
+```{r}
+sum(data$age_bd == data$age_num, na.rm = TRUE)
+```
+
+<!-- Introduce line of code to filter. -->
+
+### *Sex of the patients*
+
+![](images/idea-03.png){width="23"} The sex of the patients is given by
+**CS_SEXO**.
+
+```{r}
+# data <- data %>%
+#   dplyr::mutate(CS_SEXO = as.factor(dplyr::case_when(CS_SEXO == "F" ~ "Female",
+#                                        CS_SEXO == "M" ~ "Male",
+#                                        CS_SEXO == "I" ~ "Ignored",
+#                                        TRUE ~ "NA")))
+```
+
+![Learn](images/eye.png){alt="Learn" width="30"} A bar plot of its distribution
+can be seen below:
+
+```{r Dengue_Sex}
+ggplot2::ggplot(data, aes(x = sexo, fill=sexo))+
+  geom_bar()+
+  ggtitle("Sex distribution of dengue cases in 2015")+
+  labs(x = "Sex of the patient", y = "Count", fill="Sex")+
+  theme_light()
+
+```
+
+### *Race/Color of the patients*
+
+![Learn](images/idea.png){alt="Learn" width="20"} The race/color of the patient
+is given by **per_etn**.
+
+```{r Dengue_Race}
+data <- data %>%
+    dplyr::mutate(race = as.factor(dplyr::case_when(per_etn == 1 ~ "Indigenous",
+                                       per_etn == 2 ~ "Romani",
+                                       per_etn == 3 ~ "Raizal",
+                                       per_etn == 4 ~ "Palenque",
+                                       per_etn == 5 ~ "Black, Mulatto, Afro-colombian",
+                                       per_etn == 9 ~ "Other",
+                                       TRUE ~ "NA")))
+
+
+
+```
+
+![](images/eye.png){alt="Learn" width="30"}
+
+```{r Dengue_Race_Visualise}
+ggplot2::ggplot(data, aes(x = race, fill= race)) +
+  geom_bar() +
+  ggtitle("Race/Color distribution of dengue cases in 2015") +
+  geom_text(stat = 'count',
+            aes(label = paste0(round((after_stat(count))/sum(after_stat(count)) * 100, 1), "%"),
+                x = race),
+            position = position_stack(vjust = 0.5)) +
+  labs(x="Race/Color of the patient", y="Count",fill="Race/Color")
+```
+
+Note the amount of missing values and ignored for race/color.
+
+### *Occupation*
+
+![](images/idea-03.png){width="23"} The occupation of the patients can found in
+the column **ocupacion**. The column contains the occupation given in code,
+according to the International Standard classification of Occupations (ISCO-88,
+in English or CIUO, in spanish). You can find a complete list of the codes and
+their meaning
+[here](https://ec.europa.eu/eurostat/documents/1978984/6037342/ISCO-88-COM.pdf).
+As an overview, they are categorized and you can find the major group with the
+first number:
+
+-   1: Legislators, Senior Officials and Managers
+
+-   2: Professionals
+
+-   3: Technicians and associate professionals
+
+-   4: Clerks
+
+-   5: Service workers and shop and market sales workers
+
+-   6: Skilled agricultural and fishery workers
+
+-   7: Craft and related trades workers
+
+-   8: Plant and machine operators and assemblers
+
+-   9: Elementary occupations
+
+-   0: Armed forces
+
+Base on these major categories we can visualise the composition within dengue
+patients.
+
+```{r}
+data <- data %>%
+    dplyr::mutate(occupation = as.factor(dplyr::case_when(substr(ocupacion,1,1) == 1 ~ "Legislators, Senior Officials and Managers",
+                                       substr(ocupacion,1,1) == 2 ~ "Professionals",
+                                       substr(ocupacion,1,1) == 3 ~ "Technicians and associate professionals",
+                                       substr(ocupacion,1,1) == 4 ~ "Clerks",
+                                       substr(ocupacion,1,1) == 5 ~ "Service workers and shop and market sales workers",
+                                       substr(ocupacion,1,1) == 6 ~ "Skilled agricultural and fishery workers",
+                                       substr(ocupacion,1,1) == 7 ~ "Craft and related trades workers",
+                                       substr(ocupacion,1,1) == 8 ~ "Plant and machine operators and assemblers",
+                                       substr(ocupacion,1,1) == 9 ~ "Elementary occupations",
+                                       substr(ocupacion,1,1) == 0 ~ "Armed forces",
+                                       TRUE ~ "NA")))
+```
+
+![](images/eye-01.png){width="24"} You can visualise the main professional
+categories below:
+
+```{r}
+ggplot2::ggplot(data, aes(x = occupation, fill= occupation)) +
+  geom_bar() +
+  ggtitle("Occupation of dengue cases in 2015") +
+  geom_text(stat = 'count',
+            aes(label = paste0(round((after_stat(count))/sum(after_stat(count)) * 100, 1), "%"),
+                x = occupation),
+            position = position_stack(vjust = 0.5)) +
+  labs(x="Race/Color of the patient", y="Count",fill="Occupation")
+```
+
+### *Population groups*
+
+![](images/idea-03.png){width="23"} Further information about the patient are
+given in the columns that start with "gp\_", which indicates what population
+groups the patients belong to. The available population groups are:
+
+-   gp_discapa: Disability
+
+-   gp_desplaz: Displaced
+
+-   gp_migrant: Migrant
+
+-   gp_carcela: Imprisoned
+
+-   gp_gestan: Pregnant
+
+-   gp_indigen: Indigenous
+
+-   gp_pobicfb: Child in care of the state
+
+-   gp_mad_com: Communal moms
+
+-   gp_desmovi: Veterans???
+
+-   gp_psiquia: Interned in psychiatric centers
+
+-   gp_vic_vio: Victims of armed violence
+
+-   gp_otros: others
+
+For all these columns, 1 means "yes" and 2 means "no".
+
+Another related variable is **CS_GESTANT**, which indicates whether the patient
+is pregnant. Since only women below a certain age can get pregnant this is
+another way to check for inconsistencies.
+
+```{r Dengue_Pregnancy}
+gp_columns <- colnames(data)[grepl("gp_", colnames(data))]
+
+gp_df <- data.frame()
+for (column in gp_columns) {
+  new_df <- data.frame(
+  population_group = c(column, column),
+  condition = c("yes", "no"),
+  absolute = as.numeric(table(data[[column]])),
+  percentage = as.numeric(table(data[[column]]))/nrow(data)*100
+)
+  
+  gp_df <- rbind(gp_df, new_df)
+}
+
+ggplot(gp_df, aes(fill=condition, y=percentage, x=population_group)) + 
+    geom_bar(position="dodge", stat="identity")
+```
+
+![Filter](images/filter.png){alt="Filter" width="20"} Out of `r pregnant`
+pregnant patients, there are `r mpreg` pregnant males and `r pover50` pregnant
+women over the age of 50. Again, depending on the aim of the study, these
+patients could be excluded using the following line.
+
+```{r Dengue_Sex_Filter}
+
+```
+
+### 
+
+# Information on the cases
+
+### Event type
+
+![](images/idea-03.png){width="23"} In colombia, there are 3 events. There are
+two columns with that information: **cod_eve** with a numeric codes and
+**nombre_evento** with the name of the event. the categories are the following:
+
+-   210: Dengue
+
+-   220: Severe dengue
+
+-   580: Death by dengue
+
+![Learn](images/eye.png){alt="Learn" width="30"} A bar
+
+### Confirmation criteria
+
+![](images/idea-03.png){width="23"} The **tip_cas** shows the initial
+
+-   1: Suspected case
+
+-   2: Probable case
+
+-   3: Confirmed by laboratory
+
+-   4: Confirmed by clinical
+
+-   5: Confirmed by epidemiologic nexus
+
+Base on these major categories we can visualise the composition within dengue
+patients.
+
+```{r}
+data <- data %>%
+    dplyr::mutate(class_ini = as.factor(dplyr::case_when(tip_cas == 1 ~ "Suspected",
+                                       tip_cas == 2 ~ "Probable",
+                                       tip_cas == 3 ~ "Confirmed by laboratory",
+                                       tip_cas == 4 ~ "Confirmed by clinical",
+                                       tip_cas == 5 ~ "Confirmed by epidemiologic nexus",
+                                       TRUE ~ "NA")))
+```
+
+![Learn](images/idea.png){alt="Learn" width="20"} However the classification can
+change, any changes are given in the column **ajuste**. the codification in
+ajuste means the following:
+
+-   0: Not aplicable
+
+-   3: Confirmed by lab
+
+-   4: Confirmed by clinical
+
+-   5: Confirmed by nexo epidemiologico
+
+-   6: Discarded
+
+-   7: Other change
+
+-   D: Discarded because of digitation error
+
+```{r}
+data <- data %>%
+    dplyr::mutate(classi_fin = as.factor(dplyr::case_when(ajuste == 0 ~ class_ini,
+                                       ajuste == 3 ~ "Confirmed by lab",
+                                       ajuste == 4 ~ "Confirmed by clinical",
+                                       ajuste == 5 ~ "Confirmed by epidemiological nexus",
+                                       ajuste == 6 ~ "Discarded",
+                                       ajuste == 7 ~ "Other change",
+                                       ajuste == "D" ~ "Digitation error",
+                                       TRUE ~ "NA")))
+```
+
+![Learn](images/eye.png){alt="Learn" width="30"} A bar
+
+```{r}
+ggplot(gp_df, aes(fill=condition, y=percentage, x=population_group)) + 
+    geom_bar(position="dodge", stat="identity")
+```
+
+### *Death*
+
+![Learn](images/idea.png){alt="Learn" width="20"} The rac
+
+-   0: Not answered
+
+-   1: Alive
+
+-   2: Dead
+
+```{r}
+
+```
+
+![Learn](images/eye.png){alt="Learn" width="30"} A bar
+
+```{r}
+
+```
+
+"nom_est_f\_caso" "Probable" "Confirmado por laboratorio" "Confirmado por Nexo
+Epidemiológico"
+
+"estado_final_de_caso" 2 3 5
+
+"confirmados" 0 1
+
+# Timeline of dengue cases
+
+### *Notification distribution throughout the year*
+
+![](images/idea-03.png){width="23"} The date of the first time that a potential
+dengue patient contacts the medical authorities is recorded as **fec_not**. This
+variable can be used to see clear temporal patterns throughout the year. Below,
+there is the annual distribution of dengue notifications in 2015, plotted at a
+temporal resolution of epidemiological week. In an epidemiological week, the
+week starts on Sunday.
+
+```{r Dengue_NotificationTS}
+data[["month"]] <- month(as.Date(data$fec_not))
+
+data$month <- factor(data$month, levels = 1:12, labels = month.name)
+
+ggplot(data, aes(x = factor(month))) +
+  geom_bar(fill = "skyblue") +
+  labs(title = "Dengue Cases by Month", 
+       x = "Month", 
+       y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+![](images/idea-03.png){width="23"} The notification day is also given as
+epidemiological week
+
+```{r Dengue_NotificationTS}
+data[["epiweek"]] <- paste0(data$semana,"-", data$ano)
+
+data$epiweek <- factor(data$epiweek, levels = paste0(c(1:53),"-2015"), labels = paste0(c(1:53),"-2015"))
+
+ggplot(data, aes(x = factor(epiweek))) +
+  geom_bar(fill = "skyblue") +
+  labs(title = "Dengue cases by epiweek", 
+       x = "Epiweek", 
+       y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+### *Timeline of all other events*
+
+"ini_sin" "fec_con" "fecha_nto" "fec_arc_xl" "fec_aju"
+
+![](images/idea-03.png){width="23"} There are many dates recorded to be able ti
+understand the course of the disease. First, symptoms occur (**ini_sin**), this
+occurs before the notification date. Once the doctor notified a dengue suspicion
+(**DT_NOTIF**) the case needs to be confirmed via an exams, this should happen
+shortly after the notification. Finally, there must be a closing date
+(**DT_ENCERRA**) or date of death (**DT_OBITO**). Both of these have to be after
+the notification date.
+
+```{r Dengue_Timeline, warning=FALSE}
+time <- data.frame(A_SYMP = as.numeric(data$ini_sin - data$fec_not),
+                   B_SORO = as.numeric(data$fec_con - data$fec_not),
+                   C_DEAD = as.numeric(data$fec_arc_xl - data$fec_not),
+                   D_TOTAL = as.numeric(data$fec_aju - data$fec_not))
+long <- tidyr::gather(time, TYPE, DAYS, A_SYMP:D_TOTAL)
+```
+
+```{r}
+ggplot2::ggplot(long, aes(x = TYPE, y = DAYS)) +
+  geom_boxplot() +
+  coord_cartesian(ylim = c(-100, 100)) +
+  labs(x="Event",
+       y="Days from the notification day",
+       title="") +
+  scale_x_discrete(labels = c("First Symptoms", "Sorological Exam", "Death", "Case closed"))
+```
+
+![](images/filter-01.png){width="20"} Most dates should fall within a few days
+before the notification day or within two months after it. However, looking at
+the boxplots, this is clearly not the case. If one wants to work with the
+timeline of dengue cases, these erroneous cases need to be removed, e.g. someone
+dying before the notification date or someone having their first symptoms on the
+`r min(data$DT_SIN_PRI, na.rm=T)`.
+
+# Mapping spatially
+
+### *Absolute cases*
+
+![](images/idea-03.png){width="23"} There is of course also spatial data in the
+datasets. Before beginning the analysis, it is necessary to download the
+shapefiles of Brazils municipalities.
+
+```{r  Dengue_LoadMuni, message=FALSE, warning=FALSE}
+
+# load shapefiles
+shp1 <- sf::read_sf("data/shapefiles/colombia/MGN_ANM_MPIOS.shp")
+
+#correct names to match
+shp1$NAME_1 <- stri_trans_general(stri_trans_totitle(shp1$NAME_1), "Latin-ASCII")
+data$departamento <- stri_trans_totitle(data$departamento)
+
+# agreggate by department
+municipality_cases <- as.data.frame(table(data$cod_mun_n, dnn = list("municipality")), responseName = "municipality_cases")
+
+# merge
+shp1 <- merge(shp1, municipality_cases, by.x = "MPIO_CDPMP", by.y = "municipality", all.x = TRUE)
+
+# plot
+ggplot(shp1) +
+  ggtitle("Cases per department")+
+  geom_sf( aes(fill=municipality_cases), size=.15, show.legend = TRUE) +
+  scale_fill_viridis_c(option = "magma")
+```
+
+In total, the dataset refers to 4 different locations:
+
+-   **ID_MUNICIP** is the municipality where the case is recorded.
+-   **ID_MN_RESI** is the municipality of residence of the patient.
+-   **COMUNINF** is the probable municipality of infection.
+-   **MUNICIPIO** is the municipality of the hospital (if hospitalized).
+
+```{r  Dengue_Plot, message = FALSE, warning = FALSE}
+noti <- as.data.frame(table(data$ID_MUNICIP, dnn = list("code_muni")), responseName = "noti_muni")
+infec <- as.data.frame(table(data$COMUNINF, dnn = list("code_muni")), responseName = "infec_muni")
+resi <- as.data.frame(table(data$ID_MN_RESI, dnn = list("code_muni")), responseName = "resi_muni")
+hosp <- as.data.frame(table(data$MUNICIPIO, dnn = list("code_muni")), responseName = "hosp_muni")
+
+allmuni <- dplyr::left_join(muni, noti) %>%
+  dplyr::left_join(., infec) %>%
+  dplyr::left_join(., resi) %>%
+  dplyr::left_join(., hosp)
+
+cols <- c("green", "yellow","orange","red", "black")
+breaks <- c(0,10,100,1000,10000,100000)
+noti <- ggplot2::ggplot(allmuni) +
+  ggtitle("Notification municipality")+
+  geom_sf( aes(fill=noti_muni), size=.15, show.legend = TRUE) +
+  scale_fill_stepsn(breaks = breaks,
+                    colours = cols,
+                    values= scales::rescale(breaks))
+
+infec <- ggplot2::ggplot(allmuni) +
+  ggtitle("Probable infections municipality")+
+  geom_sf( aes(fill=infec_muni), size=.15, show.legend = TRUE)  +
+  scale_fill_stepsn(breaks = breaks,
+                    colours = cols,
+                    values= scales::rescale(breaks))
+
+resi <- ggplot2::ggplot(allmuni) +
+  ggtitle("Residence municipality")+
+  geom_sf( aes(fill=resi_muni), size=.15, show.legend = TRUE)  +
+  scale_fill_stepsn(breaks = breaks,
+                    colours = cols,
+                    values= scales::rescale(breaks))
+
+hosp <- ggplot(allmuni) +
+  ggtitle("Hospitalizations municipality")+
+  geom_sf( aes(fill=hosp_muni), size=.15, show.legend = TRUE)  +
+  scale_fill_stepsn(breaks = breaks,
+                    colours = cols,
+                    values= scales::rescale(breaks))
+
+#using the patchwork library, the plots can be displayed next to each other
+(noti+infec)/(resi+hosp)
+```
+
+Depending on the aim of the study, different variables can be important. For
+example, if your work aims to understand the dengue prevalence, the municipality
+of residence is the most suitable. However, if you need to evaluate the
+healthcare infrastructure, the municipality of hospitalisation could be more
+suitable.
+
+### *Calculate the incidence*
+
+![](images/idea-03.png){width="23"} Sometimes, having the absolute values is
+helpful. But other times, the number of dengue cases are highly dependent on the
+number of inhabitants and then the incidence is used. The incidence describes
+how many dengue cases occurred per 100.000 inhabitants.
+
+For this, the population data needs to be loaded from
+[IBGE](https://www.ibge.gov.br/estatisticas/sociais/populacao/9103-estimativas-de-populacao.html?edicao=31551&t=resultados)
+either manually or using the local function "get_br_pop_data" (instructions can
+be viewed in 0_DownloadData.md).
+
+```{r Dengue_LoadPopulation}
+get_br_pop_data(2015, save=F)
+
+allmuni <-  dplyr::left_join(allmuni, pop_2015[c("code_muni","pop")], by="code_muni")
+allmuni$pop <- as.numeric(allmuni$pop)
+```
+
+The incidence is then calculated by dividing the dengue cases by the population
+of each municipality and multiplicating it by 100.000.
+
+```{r  Dengue_Incidence, message=FALSE, warning=FALSE}
+allmuni$noti_inc <- allmuni$noti_muni / allmuni$pop * 100000
+allmuni$infec_inc <- allmuni$infec_muni / allmuni$pop * 100000
+allmuni$resi_inc <- allmuni$resi_muni / allmuni$pop * 100000
+allmuni$hosp_inc <- allmuni$hosp_muni / allmuni$pop * 100000
+
+# Population
+ggplot2::ggplot(allmuni) +
+  ggtitle("Population in Brazil")+
+  geom_sf( aes(fill = pop), size = .15, show.legend = TRUE)  +
+  scale_fill_stepsn(breaks = breaks,
+                    colours = cols,
+                    values= scales::rescale(breaks))
+
+# Incidence
+breaks2 <- c(0,5,25,50,100, 250)
+noti_inc <- ggplot2::ggplot(allmuni) +
+  ggtitle("Incidence of dengue notifications in 2015")+
+  geom_sf( aes(fill = noti_inc), size = .15, show.legend = TRUE)  +
+  scale_fill_stepsn(breaks = breaks2,
+                    colours = cols,
+                    values = scales::rescale(breaks2))
+infec_inc <- ggplot2::ggplot(allmuni) +
+  ggtitle("Incidence of probable dengue infections in 2015")+
+  geom_sf( aes(fill = infec_inc), size = .15, show.legend = TRUE)  +
+  scale_fill_stepsn(breaks = breaks2,
+                    colours = cols,
+                    values = scales::rescale(breaks2))
+resi_inc <- ggplot2::ggplot(allmuni) +
+  ggtitle("Incidence of residents with dengue in 2015")+
+  geom_sf( aes(fill = resi_inc), size = .15, show.legend = TRUE)  +
+  scale_fill_stepsn(breaks = breaks2,
+                    colours = cols,
+                    values = scales::rescale(breaks2))
+hosp_inc <- ggplot2::ggplot(allmuni) +
+  ggtitle("Incidence of dengue hospitalizations in 2015")+
+  geom_sf( aes(fill = hosp_inc), size = .15, show.legend = TRUE) +
+  scale_fill_stepsn(breaks = breaks2,
+                    colours = cols,
+                    values = scales::rescale(breaks2))
+
+(noti_inc+infec_inc)/(resi_inc+hosp_inc)
+```
+
+"area"
+
+\[45\] "consecutive_origen" "va_sispro"
+
+paciente: "tip_ss"
+
+time: "fec_not" "semana" "ano" "ini_sin" "fec_con" "fecha_nto" "fec_arc_xl"
+"fec_aju"
+
+space:
+
+-   ocurrencia"cod_pais_o" "cod_dpto_o" "cod_mun_o" "departamento_ocurrencia"
+    "pais_ocurrencia" "municipio_ocurrencia"
+
+-   residencia: "cod_dpto_r" "cod_mun_r" "departamento_residencia"
+    "municipio_residencia"
+
+-   notificacion: "departamento_notificacion"
+
+    "municipio_notificacion" "cod_dpto_n" "cod_mun_n"
+
+caso: "cod_eve" "nombre_evento" "con_fin" "ajuste" "tip_cas" "nom_est_f\_caso"
+"estado_final_de_caso" "confirmados"
+
+hospital: "cod_pre" "cod_sub" "pac_hos" "fec_hos" "cod_ase" "cod_sub" "nom_upgd"
+"cod_pre"

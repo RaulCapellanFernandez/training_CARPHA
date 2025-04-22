@@ -1,0 +1,24 @@
+Package: harmonize.data4health
+Title: data4health Cleans, Aggregates, And Visualises Linelist Health
+        Data
+Version: 0.0.0.9000
+Authors@R: 
+    c(person(given = "Daniela", family = "Lührsen", email = "daniela.luhrsen@bsc.es",
+             role = c("aut", "cre"), comment = c(ORCID = "0009-0002-6340-5964")),
+        person(given = "Raquel", family = "Lana", email = "raquel.lana@bsc.es",
+               role = c("aut"), comment = c(ORCID = "0000-0002-7573-1364")),
+        person(given = "Rachel", family = "Lowe", email = "rachel.lowe@bsc.es",
+               role = c("ctb"), comment = c(ORCID = "0000-0003-3939-7343")))
+Description: What the package does (one paragraph).
+Imports: foreign, readxl, read.dbc, shiny, dplyr, magrittr, stringr
+License: GPL (>= 3)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
+NeedsCompilation: no
+Packaged: 2025-04-02 13:33:49 UTC; dluhrsen
+Author: Daniela Lührsen [aut, cre] (<https://orcid.org/0009-0002-6340-5964>),
+  Raquel Lana [aut] (<https://orcid.org/0000-0002-7573-1364>),
+  Rachel Lowe [ctb] (<https://orcid.org/0000-0003-3939-7343>)
+Maintainer: Daniela Lührsen <daniela.luhrsen@bsc.es>
+Depends: R (>= 3.5.0)
